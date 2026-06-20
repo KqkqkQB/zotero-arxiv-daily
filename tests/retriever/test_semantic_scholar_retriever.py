@@ -19,6 +19,7 @@ def _add_semantic_scholar_config(config):
             "require_abstract": True,
             "require_venue": True,
             "venue_filter": None,
+            "api_key": None,
         }
 
 
@@ -190,6 +191,7 @@ def test_semantic_scholar_retrieve_raw_papers_mocked(config, monkeypatch):
         assert params["query"] == "medical image segmentation"
         assert params["limit"] == 5
         assert params["year"] == "2025-2026"
+        assert headers == {}
         return FakeResponse()
 
     monkeypatch.setattr(
@@ -206,6 +208,45 @@ def test_semantic_scholar_retrieve_raw_papers_mocked(config, monkeypatch):
 
     assert len(raw_papers) == 1
     assert raw_papers[0]["title"] == "Medical Image Segmentation Paper"
+
+
+def test_semantic_scholar_uses_api_key_header(config, monkeypatch):
+    _add_semantic_scholar_config(config)
+    config.source.semantic_scholar.api_key = "test-semantic-scholar-key"
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": []}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"x-api-key": "test-semantic-scholar-key"}
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.retriever.semantic_scholar_retriever.requests.get",
+        fake_get,
+    )
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.retriever.semantic_scholar_retriever.time.sleep",
+        lambda _: None,
+    )
+
+    retriever = SemanticScholarRetriever(config)
+    assert retriever._retrieve_raw_papers() == []
+
+
+def test_semantic_scholar_null_query_uses_default(config):
+    _add_semantic_scholar_config(config)
+    config.source.semantic_scholar.query = None
+
+    retriever = SemanticScholarRetriever(config)
+
+    assert "medical image segmentation" in retriever.query
 
 
 def test_semantic_scholar_429_returns_empty_after_retries(config, monkeypatch):

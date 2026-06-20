@@ -18,7 +18,7 @@
 
 ---
 
-<p align="center"> Recommend new arxiv papers of your interest daily according to your Zotero library.
+<p align="center"> Recommend new arXiv, journal, and conference papers of your interest daily according to your Zotero library.
     <br> 
 </p>
 
@@ -29,7 +29,7 @@
 
 > Track new scientific researches of your interest by just forking (and staring) this repo!😊
 
-*Zotero-arXiv-Daily* finds arxiv papers that may attract you based on the context of your Zotero library, and then sends the result to your mailbox📮. It can be deployed as Github Action Workflow with **zero cost**, **no installation**, and **few configuration** of Github Action environment variables for daily **automatic** delivery.
+*Zotero-arXiv-Daily* finds arXiv, journal, and conference papers that may attract you based on the context of your Zotero library, and then sends the result to your mailbox📮. It can be deployed as Github Action Workflow with **zero cost**, **no installation**, and **few configuration** of Github Action environment variables for daily **automatic** delivery.
 
 ## ✨ Features
 - Totally free! All the calculation can be done in the Github Action runner locally within its quota (for public repo).
@@ -42,6 +42,7 @@
 - Ignore unwanted Zotero papers using a list of glob patterns.
 - Support multiple sources of papers to retrieve:
   - arxiv
+  - semantic_scholar
   - biorxiv
   - medrxiv
 
@@ -96,12 +97,23 @@ source:
   arxiv:
     category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Set to true to include arXiv cross-list papers in these categories.
+  semantic_scholar:
+    query: '("medical image segmentation" OR "PET/MRI" OR "semi-supervised segmentation")'
+    year_from: 2025
+    year_to: null
+    limit: 100
+    api_key: ${oc.env:SEMANTIC_SCHOLAR_API_KEY,null} # Optional, but helpful for rate limits.
+    publication_types: ["JournalArticle", "Conference"]
+    require_abstract: true
+    require_venue: true
+    venue_filter: null # Or e.g. ["MICCAI", "Medical Image Analysis", "CVPR"]
 
 executor:
   debug: ${oc.env:DEBUG,null}
-  source: ['arxiv']
+  source: ['arxiv','semantic_scholar']
 ```
 Set `source.arxiv.include_cross_list: true` if you want cross-listed papers included.
+Set `executor.source: ['semantic_scholar']` if you only want journal/conference recommendations and do not want arXiv papers.
 >[!NOTE]
 > `${oc.env:XXX,yyy}` means the value of the environment variable `XXX`. If the variable is not set, the default value `yyy` will be used.
 
@@ -116,6 +128,16 @@ source:
   arxiv:
     category: null # The categories of target arxiv papers. Find the abbr of your research area from [here](https://arxiv.org/category_taxonomy). Example: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Whether to include arXiv cross-list papers in subscribed categories. Example: true
+  semantic_scholar:
+    query: null # Keyword query for journal/conference papers. Example: '("medical image segmentation" OR "PET/MRI" OR "MICCAI")'
+    year_from: 2024 # Earliest publication year to retrieve from Semantic Scholar. Example: 2025
+    year_to: null # Latest publication year, or null for open-ended. Example: 2026
+    limit: 100 # Maximum papers to request from Semantic Scholar. Example: 100
+    api_key: ${oc.env:SEMANTIC_SCHOLAR_API_KEY,null} # Optional Semantic Scholar Graph API key for higher rate limits.
+    publication_types: ["JournalArticle", "Conference"] # Keep journal and conference papers by default.
+    require_abstract: true # Recommended for reranking quality.
+    require_venue: true # Keep papers with a journal/conference venue.
+    venue_filter: null # Optional venue allowlist. Example: ["MICCAI","Medical Image Analysis","CVPR"]
   biorxiv:
     category: null # The categories of target biorxiv papers. Find categories from [here](https://www.biorxiv.org/). Example: ["biochemistry","animal behavior and cognition"]
   medrxiv:
@@ -155,7 +177,7 @@ executor:
   debug: false # Whether to use debug mode. Example: true
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
-  source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
+  source: ??? # The sources of papers to retrieve. Example: ['arxiv','semantic_scholar','biorxiv','medrxiv']
   reranker: local # The reranker to use. Example: 'local' or 'api'
 ```
 
@@ -163,7 +185,7 @@ That's all! Now you can test the workflow by manually triggering it:
 ![test](./assets/test.png)
 
 > [!NOTE]
-> The Test-Workflow Action is the debug version of the main workflow (Send-emails-daily), which always retrieve 5 arxiv papers regardless of the date. While the main workflow will be automatically triggered everyday and retrieve new papers released yesterday. There is no new arxiv paper at weekends and holiday, in which case you may see "No new papers found" in the log of main workflow.
+> The Test-Workflow Action is the debug version of the main workflow (Send-emails-daily), which always retrieves a small number of papers regardless of the date. While the main workflow will be automatically triggered everyday and retrieve new papers from the configured sources. There may be no new arXiv paper at weekends and holidays, in which case you can enable `semantic_scholar` to also search recent journal and conference papers.
 
 Then check the log and the receiver email after it finishes.
 

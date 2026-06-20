@@ -1,4 +1,6 @@
+import os
 import time
+
 import requests
 from loguru import logger
 
@@ -9,15 +11,11 @@ from ..protocol import Paper
 @register_retriever("semantic_scholar")
 class SemanticScholarRetriever(BaseRetriever):
     """
-    从 Semantic Scholar Graph API 抓取最近几年/几个月的期刊和会议论文。
+    Retrieve recent journal and conference papers from Semantic Scholar.
 
-    适合方向：
-    - medical image segmentation
-    - PET/MRI
-    - semi-supervised segmentation
-    - multimodal medical image analysis
-
-    不依赖大模型 API。
+    This source complements arXiv with peer-reviewed publication venues. It is
+    query-based because Semantic Scholar does not expose arXiv-like category
+    feeds for every field.
     """
 
     API_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
@@ -25,41 +23,44 @@ class SemanticScholarRetriever(BaseRetriever):
     def __init__(self, config):
         super().__init__(config)
 
-        self.query = self.retriever_config.get(
-            "query",
+        self.query = self.retriever_config.get("query") or (
             '("medical image segmentation" OR "PET/MRI" OR "PET MRI" OR "semi-supervised segmentation")'
         )
-
         self.limit = int(self.retriever_config.get("limit", 100))
         self.year_from = int(self.retriever_config.get("year_from", 2024))
         self.year_to = self.retriever_config.get("year_to", None)
         self.venue_filter = self.retriever_config.get("venue_filter", None)
+        self.api_key = self.retriever_config.get("api_key", None) or os.getenv(
+            "SEMANTIC_SCHOLAR_API_KEY"
+        )
         self.publication_types = self.retriever_config.get(
             "publication_types",
-            ["JournalArticle", "Conference"]
+            ["JournalArticle", "Conference"],
         )
 
-        # 是否只保留有摘要的论文。建议 True，否则后面 embedding 排序会变差。
+        # Papers without abstracts are poor reranking candidates.
         self.require_abstract = bool(self.retriever_config.get("require_abstract", True))
 
-        # 是否只保留有 venue 的论文。建议 True，因为你要期刊/会议论文。
+        # Venue presence is the main signal that this is a journal/conference paper.
         self.require_venue = bool(self.retriever_config.get("require_venue", True))
 
     def _retrieve_raw_papers(self) -> list[dict]:
-        fields = ",".join([
-            "paperId",
-            "title",
-            "abstract",
-            "authors",
-            "year",
-            "venue",
-            "publicationVenue",
-            "publicationTypes",
-            "publicationDate",
-            "externalIds",
-            "url",
-            "openAccessPdf",
-        ])
+        fields = ",".join(
+            [
+                "paperId",
+                "title",
+                "abstract",
+                "authors",
+                "year",
+                "venue",
+                "publicationVenue",
+                "publicationTypes",
+                "publicationDate",
+                "externalIds",
+                "url",
+                "openAccessPdf",
+            ]
+        )
 
         params = {
             "query": self.query,
@@ -70,6 +71,7 @@ class SemanticScholarRetriever(BaseRetriever):
 
         logger.info(f"Semantic Scholar query: {self.query}")
         logger.info(f"Semantic Scholar year: {params['year']}")
+        headers = self._build_headers()
 
         response = None
 
@@ -110,6 +112,11 @@ class SemanticScholarRetriever(BaseRetriever):
         time.sleep(1)
         return raw_papers
 
+    def _build_headers(self) -> dict[str, str]:
+        if not self.api_key:
+            return {}
+        return {"x-api-key": str(self.api_key)}
+
     def _build_year_param(self) -> str:
         if self.year_to is None:
             return f"{self.year_from}-"
@@ -132,12 +139,12 @@ class SemanticScholarRetriever(BaseRetriever):
 
         publication_types = raw_paper.get("publicationTypes") or []
 
-        # 只保留期刊/会议类型
+        # Keep only the requested publication types, usually journals/conferences.
         if self.publication_types:
             if not any(t in publication_types for t in self.publication_types):
                 return None
 
-        # 可选：限定顶刊/顶会/常见医学影像期刊会议
+        # Optional allowlist for target journals/conferences.
         if self.venue_filter:
             venue_lower = venue.lower() if venue else ""
             if not any(v.lower() in venue_lower for v in self.venue_filter):
@@ -167,7 +174,6 @@ class SemanticScholarRetriever(BaseRetriever):
             url=url,
             pdf_url=pdf_url,
             full_text=None,
-
             doi=doi,
             venue=venue,
             year=raw_paper.get("year"),

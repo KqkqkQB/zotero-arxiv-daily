@@ -19,28 +19,29 @@ llm:
 
 source:
   semantic_scholar:
-    # 综合方向：医学图像分割 + PET/MRI + 半监督分割
+    # Broad query for medical image analysis, PET/MRI, and semi-supervised segmentation.
     query: >
       ("medical image segmentation" OR "medical image analysis" OR "PET/MRI" OR "PET MRI" OR "positron emission tomography magnetic resonance" OR "semi-supervised segmentation" OR "semi-supervised medical image segmentation" OR "multimodal medical image segmentation")
-    # 最近一年左右。现在是 2026 年，你可以先抓 2025 至今。
+    # Recent papers. Use 2025-2026 by default.
     year_from: 2025
     year_to: 2026
 
-    # 每次最多抓多少篇。先别太大，100 或 200 就够。
+    # Keep this modest to avoid API rate limits.
     limit: 50
+    api_key: ${oc.env:SEMANTIC_SCHOLAR_API_KEY,null}
 
-    # 只要期刊和会议
+    # Keep journal and conference papers.
     publication_types:
       - JournalArticle
       - Conference
 
-    # 只保留有摘要的论文，否则后面本地 embedding 排序效果差
+    # Abstracts improve embedding-based reranking.
     require_abstract: true
 
-    # 只保留有期刊/会议名的论文
+    # Require a journal/conference venue.
     require_venue: true
 
-    # 先不要限制具体 venue，避免漏掉论文
+    # Leave unrestricted first to avoid filtering out useful papers.
     venue_filter: null
 
   arxiv:
@@ -52,6 +53,7 @@ source:
 
   medrxiv:
     category: null
+
 executor:
   debug: ${oc.env:DEBUG,null}
   source: ["semantic_scholar"]
