@@ -4,6 +4,7 @@ from arxiv import Result as ArxivResult
 from ..protocol import Paper
 from ..utils import extract_markdown_from_pdf, extract_tex_code_from_tar
 from tempfile import TemporaryDirectory
+from datetime import datetime, timedelta, timezone
 import feedparser
 from tqdm import tqdm
 import multiprocessing
@@ -141,6 +142,7 @@ class ArxivRetriever(BaseRetriever):
                 try:
                     batch = list(client.results(search))
                     bar.update(len(batch))
+                    batch = self._filter_by_publish_date(batch)
                     raw_papers.extend(batch)
                     break
                 except arxiv.HTTPError as exc:
@@ -155,6 +157,29 @@ class ArxivRetriever(BaseRetriever):
         bar.close()
 
         return raw_papers
+
+    def _filter_by_publish_date(self, papers: list[ArxivResult]) -> list[ArxivResult]:
+        days_back = self.config.source.arxiv.get("days_back", 1)
+        if days_back is None or self.config.executor.debug:
+            return papers
+
+        days_back = max(1, int(days_back))
+        earliest_date = (datetime.now(timezone.utc) - timedelta(days=days_back - 1)).date()
+        filtered = []
+        for paper in papers:
+            published = getattr(paper, "published", None)
+            if published is None:
+                filtered.append(paper)
+                continue
+
+            published_date = published.date()
+            if published_date >= earliest_date:
+                filtered.append(paper)
+
+        logger.info(
+            f"arXiv kept {len(filtered)}/{len(papers)} papers published since {earliest_date}"
+        )
+        return filtered
 
     def convert_to_paper(self, raw_paper: ArxivResult) -> Paper:
         title = raw_paper.title

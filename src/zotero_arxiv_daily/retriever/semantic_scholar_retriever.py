@@ -23,9 +23,8 @@ class SemanticScholarRetriever(BaseRetriever):
     def __init__(self, config):
         super().__init__(config)
 
-        self.query = self.retriever_config.get("query") or (
-            '("medical image segmentation" OR "PET/MRI" OR "PET MRI" OR "semi-supervised segmentation")'
-        )
+        self.queries = self._build_queries()
+        self.query = self.queries[0]
         self.limit = int(self.retriever_config.get("limit", 100))
         self.year_from = int(self.retriever_config.get("year_from", 2024))
         self.year_to = self.retriever_config.get("year_to", None)
@@ -62,19 +61,60 @@ class SemanticScholarRetriever(BaseRetriever):
             ]
         )
 
-        params = {
-            "query": self.query,
-            "limit": self.limit,
-            "fields": fields,
-            "year": self._build_year_param(),
-        }
-
-        logger.info(f"Semantic Scholar query: {self.query}")
-        logger.info(f"Semantic Scholar year: {params['year']}")
         headers = self._build_headers()
+        year = self._build_year_param()
+        raw_papers_by_key = {}
 
+        logger.info(f"Semantic Scholar year: {year}")
+        for query in self.queries:
+            params = {
+                "query": query,
+                "limit": self.limit,
+                "fields": fields,
+                "year": year,
+            }
+            logger.info(f"Semantic Scholar query: {query}")
+            response = self._get_with_retries(params, headers)
+            if response is None:
+                continue
+
+            response.raise_for_status()
+            data = response.json()
+            for raw_paper in data.get("data", []):
+                key = self._dedupe_key(raw_paper)
+                if key:
+                    raw_papers_by_key[key] = raw_paper
+
+            logger.info(
+                f"Semantic Scholar returned {len(data.get('data', []))} raw papers for query: {query}"
+            )
+            time.sleep(1)
+
+        raw_papers = list(raw_papers_by_key.values())
+        logger.info(f"Semantic Scholar returned {len(raw_papers)} unique raw papers")
+        return raw_papers
+
+    def _build_queries(self) -> list[str]:
+        queries = self.retriever_config.get("queries", None)
+        if queries:
+            cleaned_queries = [str(query).strip() for query in queries if str(query).strip()]
+            if cleaned_queries:
+                return cleaned_queries
+
+        query = self.retriever_config.get("query", None)
+        if query:
+            return [str(query).strip()]
+
+        return [
+            "medical image segmentation",
+            "medical image analysis",
+            "PET MRI",
+            "semi supervised segmentation",
+            "multimodal medical image segmentation",
+        ]
+
+    def _get_with_retries(self, params: dict, headers: dict) -> requests.Response | None:
         response = None
-
         for attempt in range(3):
             response = requests.get(
                 self.API_URL,
@@ -84,7 +124,7 @@ class SemanticScholarRetriever(BaseRetriever):
             )
 
             if response.status_code != 429:
-                break
+                return response
 
             wait_seconds = 10 * (attempt + 1)
             logger.warning(
@@ -94,23 +134,29 @@ class SemanticScholarRetriever(BaseRetriever):
             )
             time.sleep(wait_seconds)
 
-        if response is None:
-            return []
-
-        if response.status_code == 429:
+        if response is not None and response.status_code == 429:
             logger.error(
                 "Semantic Scholar API is still rate limited after retries. "
-                "Returning empty result instead of failing the workflow."
+                "Skipping this query instead of failing the workflow."
             )
-            return []
 
-        response.raise_for_status()
-        data = response.json()
-        raw_papers = data.get("data", [])
+        return None
 
-        logger.info(f"Semantic Scholar returned {len(raw_papers)} raw papers")
-        time.sleep(1)
-        return raw_papers
+    def _dedupe_key(self, raw_paper: dict) -> str | None:
+        external_ids = raw_paper.get("externalIds") or {}
+        doi = external_ids.get("DOI")
+        if doi:
+            return f"doi:{doi.lower()}"
+
+        paper_id = raw_paper.get("paperId")
+        if paper_id:
+            return f"paper:{paper_id}"
+
+        title = raw_paper.get("title")
+        if title:
+            return f"title:{title.strip().lower()}"
+
+        return None
 
     def _build_headers(self) -> dict[str, str]:
         if not self.api_key:
@@ -139,8 +185,9 @@ class SemanticScholarRetriever(BaseRetriever):
 
         publication_types = raw_paper.get("publicationTypes") or []
 
-        # Keep only the requested publication types, usually journals/conferences.
-        if self.publication_types:
+        # Keep requested publication types when Semantic Scholar provides them.
+        # Some valid venue papers have this field missing, so venue is the fallback signal.
+        if self.publication_types and publication_types:
             if not any(t in publication_types for t in self.publication_types):
                 return None
 

@@ -1,5 +1,6 @@
 """Tests for ArxivRetriever."""
 
+from datetime import datetime, timedelta, timezone
 import time
 from types import SimpleNamespace
 
@@ -61,6 +62,24 @@ def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
 
     assert len(papers) == len(new_entries)
     assert set(p.title for p in papers) == set(e.title for e in new_entries)
+
+
+def test_arxiv_filter_by_publish_date(config):
+    retriever = ArxivRetriever(config)
+    today = datetime.now(timezone.utc)
+    old_day = today - timedelta(days=2)
+    papers = [
+        SimpleNamespace(title="Today Paper", published=today),
+        SimpleNamespace(title="Old Paper", published=old_day),
+        SimpleNamespace(title="Missing Date Paper"),
+    ]
+
+    filtered = retriever._filter_by_publish_date(papers)
+
+    assert [paper.title for paper in filtered] == [
+        "Today Paper",
+        "Missing Date Paper",
+    ]
 
 
 def test_run_with_hard_timeout_returns_value():

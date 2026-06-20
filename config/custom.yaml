@@ -19,12 +19,19 @@ llm:
 
 source:
   semantic_scholar:
-    # Broad query for medical image analysis, PET/MRI, and semi-supervised segmentation.
-    query: >
-      ("medical image segmentation" OR "medical image analysis" OR "PET/MRI" OR "PET MRI" OR "positron emission tomography magnetic resonance" OR "semi-supervised segmentation" OR "semi-supervised medical image segmentation" OR "multimodal medical image segmentation")
-    # Recent papers. Use 2025-2026 by default.
+    # Search each query separately, then merge and deduplicate the results.
+    queries:
+      - medical image segmentation
+      - medical image analysis
+      - PET MRI
+      - positron emission tomography magnetic resonance
+      - semi supervised segmentation
+      - semi supervised medical image segmentation
+      - multimodal medical image segmentation
+
+    # Journal/conference papers from the recent one to two years.
     year_from: 2025
-    year_to: 2026
+    year_to: null
 
     # Keep this modest to avoid API rate limits.
     limit: 50
@@ -47,6 +54,7 @@ source:
   arxiv:
     category: ["cs.CV", "cs.AI", "cs.LG"]
     include_cross_list: true
+    days_back: 1
 
   biorxiv:
     category: null
@@ -56,4 +64,5 @@ source:
 
 executor:
   debug: ${oc.env:DEBUG,null}
-  source: ["semantic_scholar"]
+  send_empty: false
+  source: ["arxiv", "semantic_scholar"]

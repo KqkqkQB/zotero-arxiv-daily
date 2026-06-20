@@ -12,6 +12,7 @@ def _add_semantic_scholar_config(config):
     with open_dict(config.source):
         config.source.semantic_scholar = {
             "query": "medical image segmentation",
+            "queries": None,
             "year_from": 2025,
             "year_to": 2026,
             "limit": 5,
@@ -157,6 +158,27 @@ def test_semantic_scholar_skip_unwanted_publication_type(config):
     assert paper is None
 
 
+def test_semantic_scholar_keep_venue_paper_without_publication_types(config):
+    _add_semantic_scholar_config(config)
+
+    retriever = SemanticScholarRetriever(config)
+
+    raw_paper = {
+        "title": "Venue Paper Without Publication Types",
+        "abstract": "abstract",
+        "authors": [{"name": "A"}],
+        "year": 2025,
+        "venue": "Medical Image Analysis",
+        "publicationTypes": None,
+        "url": "https://example.com",
+    }
+
+    paper = retriever.convert_to_paper(raw_paper)
+
+    assert paper is not None
+    assert paper.venue == "Medical Image Analysis"
+
+
 def test_semantic_scholar_retrieve_raw_papers_mocked(config, monkeypatch):
     _add_semantic_scholar_config(config)
 
@@ -208,6 +230,61 @@ def test_semantic_scholar_retrieve_raw_papers_mocked(config, monkeypatch):
 
     assert len(raw_papers) == 1
     assert raw_papers[0]["title"] == "Medical Image Segmentation Paper"
+
+
+def test_semantic_scholar_multiple_queries_are_deduplicated(config, monkeypatch):
+    _add_semantic_scholar_config(config)
+    config.source.semantic_scholar.query = None
+    config.source.semantic_scholar.queries = [
+        "medical image segmentation",
+        "semi supervised segmentation",
+    ]
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": [
+                    {
+                        "paperId": "same-paper",
+                        "title": "Duplicate Paper",
+                        "abstract": "abstract",
+                        "authors": [{"name": "A"}],
+                        "year": 2025,
+                        "venue": "Medical Image Analysis",
+                        "publicationTypes": ["JournalArticle"],
+                        "url": "https://example.com",
+                    }
+                ]
+            }
+
+    seen_queries = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        seen_queries.append(params["query"])
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.retriever.semantic_scholar_retriever.requests.get",
+        fake_get,
+    )
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.retriever.semantic_scholar_retriever.time.sleep",
+        lambda _: None,
+    )
+
+    retriever = SemanticScholarRetriever(config)
+    raw_papers = retriever._retrieve_raw_papers()
+
+    assert seen_queries == [
+        "medical image segmentation",
+        "semi supervised segmentation",
+    ]
+    assert len(raw_papers) == 1
 
 
 def test_semantic_scholar_uses_api_key_header(config, monkeypatch):

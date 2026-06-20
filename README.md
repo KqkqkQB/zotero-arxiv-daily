@@ -97,8 +97,12 @@ source:
   arxiv:
     category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Set to true to include arXiv cross-list papers in these categories.
+    days_back: 1 # Today's arXiv papers.
   semantic_scholar:
-    query: '("medical image segmentation" OR "PET/MRI" OR "semi-supervised segmentation")'
+    queries:
+      - medical image segmentation
+      - PET MRI
+      - semi supervised segmentation
     year_from: 2025
     year_to: null
     limit: 100
@@ -128,8 +132,10 @@ source:
   arxiv:
     category: null # The categories of target arxiv papers. Find the abbr of your research area from [here](https://arxiv.org/category_taxonomy). Example: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Whether to include arXiv cross-list papers in subscribed categories. Example: true
+    days_back: 1 # Keep arXiv papers published in the latest N UTC days. Use 1 for today's papers.
   semantic_scholar:
     query: null # Keyword query for journal/conference papers. Example: '("medical image segmentation" OR "PET/MRI" OR "MICCAI")'
+    queries: null # Optional list of keyword queries. Each query is searched separately and results are deduplicated.
     year_from: 2024 # Earliest publication year to retrieve from Semantic Scholar. Example: 2025
     year_to: null # Latest publication year, or null for open-ended. Example: 2026
     limit: 100 # Maximum papers to request from Semantic Scholar. Example: 100
