@@ -71,13 +71,36 @@ class SemanticScholarRetriever(BaseRetriever):
         logger.info(f"Semantic Scholar query: {self.query}")
         logger.info(f"Semantic Scholar year: {params['year']}")
 
-        response = requests.get(self.API_URL, params=params, timeout=30)
+        response = None
+
+        for attempt in range(3):
+            response = requests.get(
+                self.API_URL,
+                params=params,
+                headers=headers,
+                timeout=30,
+            )
+
+            if response.status_code != 429:
+                break
+
+            wait_seconds = 10 * (attempt + 1)
+            logger.warning(
+                f"Semantic Scholar API rate limited: 429. "
+                f"Retrying in {wait_seconds} seconds... "
+                f"attempt={attempt + 1}/3"
+            )
+            time.sleep(wait_seconds)
+
+        if response is None:
+            return []
 
         if response.status_code == 429:
-            raise RuntimeError(
-                "Semantic Scholar API rate limited: 429. "
-                "稍后再运行，或者减少 limit。"
+            logger.error(
+                "Semantic Scholar API is still rate limited after retries. "
+                "Returning empty result instead of failing the workflow."
             )
+            return []
 
         response.raise_for_status()
         data = response.json()

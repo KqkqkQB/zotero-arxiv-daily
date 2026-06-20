@@ -76,3 +76,18 @@ def test_get_block_html_contains_all_fields():
 def test_get_empty_html():
     html = get_empty_html()
     assert "No Papers Today" in html
+
+def test_render_email_with_venue_metadata():
+    paper = make_sample_paper(score=7.0, tldr="ok")
+    paper.venue = "Medical Image Analysis"
+    paper.publication_types = ["JournalArticle"]
+    paper.year = 2025
+    paper.publication_date = "2025-05-01"
+    paper.doi = "10.1234/test.2025.001"
+
+    html = render_email([paper])
+
+    assert "Medical Image Analysis" in html
+    assert "JournalArticle" in html
+    assert "2025" in html
+    assert "10.1234/test.2025.001" in html
