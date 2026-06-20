@@ -18,9 +18,40 @@ llm:
     model: gpt-4o-mini
 
 source:
-  arxiv:
-    category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
+  semantic_scholar:
+    # 综合方向：医学图像分割 + PET/MRI + 半监督分割
+    query: >
+      ("medical image segmentation" OR "medical image analysis" OR "PET/MRI" OR "PET MRI" OR "positron emission tomography magnetic resonance" OR "semi-supervised segmentation" OR "semi-supervised medical image segmentation" OR "multimodal medical image segmentation")
+    # 最近一年左右。现在是 2026 年，你可以先抓 2025 至今。
+    year_from: 2025
+    year_to: 2026
 
+    # 每次最多抓多少篇。先别太大，100 或 200 就够。
+    limit: 50
+
+    # 只要期刊和会议
+    publication_types:
+      - JournalArticle
+      - Conference
+
+    # 只保留有摘要的论文，否则后面本地 embedding 排序效果差
+    require_abstract: true
+
+    # 只保留有期刊/会议名的论文
+    require_venue: true
+
+    # 先不要限制具体 venue，避免漏掉论文
+    venue_filter: null
+
+  arxiv:
+    category: ["cs.CV", "cs.AI", "cs.LG"]
+    include_cross_list: true
+
+  biorxiv:
+    category: null
+
+  medrxiv:
+    category: null
 executor:
   debug: ${oc.env:DEBUG,null}
-  source: ['arxiv']
+  source: ["semantic_scholar"]

@@ -20,6 +20,12 @@ class Paper:
     tldr: Optional[str] = None
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
+    # 新增：期刊/会议论文元数据
+    doi: Optional[str] = None
+    venue: Optional[str] = None          # 期刊名或会议名
+    year: Optional[int] = None
+    publication_date: Optional[str] = None
+    publication_types: Optional[list[str]] = None
 
     def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
         lang = llm_params.get('language', 'English')
